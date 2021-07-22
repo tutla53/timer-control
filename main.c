@@ -33,7 +33,7 @@ static volatile unsigned
 	hours=0, minutes=0, seconds=0,
 	alarm=0;			// != 0 when alarm is pending
 	
-int Vin = 0;
+int adc0 = 0;
 
 static void adc_setup(void){
 	
@@ -112,7 +112,7 @@ rtc_isr(void) {
 		// Increment time:
 		intstatus = taskENTER_CRITICAL_FROM_ISR();
 		
-		Vin = read_adc(0) * 330 / 4095;
+		adc0 = read_adc(0) * 330 / 4095;
 		
 		taskEXIT_CRITICAL_FROM_ISR(intstatus);
 
@@ -138,8 +138,7 @@ rtc_isr(void) {
  * Set an alarm n seconds into the future
  *********************************************************************/
 
-static void
-set_alarm(unsigned secs) {
+static void set_alarm(unsigned secs) {
 	alarm = (rtc_get_counter_val() + secs) & 0xFFFFFFFF;
 
 	rtc_disable_alarm();
@@ -151,8 +150,7 @@ set_alarm(unsigned secs) {
  * Task 3 : Alarm
  *********************************************************************/
 
-static void
-task3(void *args __attribute__((unused))) {
+static void task3(void *args __attribute__((unused))) {
 
 	for (;;) {
 		// Block execution until notified
@@ -169,8 +167,7 @@ task3(void *args __attribute__((unused))) {
  * Task 2 : Toggle LED and report time
  *********************************************************************/
 
-static void
-task2(void *args __attribute__((unused))) {
+static void task2(void *args __attribute__((unused))) {
 
 	for (;;) {
 		// Block execution until notified
@@ -180,7 +177,7 @@ task2(void *args __attribute__((unused))) {
 		gpio_toggle(GPIOC,GPIO13);
 
 		mutex_lock();
-		std_printf("Voltage: %d.%2d Time: %d\n",Vin/100,Vin%100);
+		std_printf("Test: %d.%02d V\n",adc0/100,adc0%100);
 		mutex_unlock();
 	}
 }
