@@ -16,6 +16,7 @@
 #include <libopencm3/stm32/rtc.h>
 #include <libopencm3/stm32/gpio.h>
 #include <libopencm3/cm3/nvic.h>
+#include <libopencm3/stm32/adc.h>
 
 #define USE_USB		1		// Set to 1 for USB
 
@@ -31,6 +32,42 @@ static volatile unsigned
 	days=0,
 	hours=0, minutes=0, seconds=0,
 	alarm=0;			// != 0 when alarm is pending
+	
+int Vin = 0;
+
+static void adc_setup(void){
+	
+	/*Setup ADC*/
+	rcc_peripheral_enable_clock(&RCC_APB2ENR,RCC_APB2ENR_ADC1EN);
+	adc_power_off(ADC1);
+	rcc_peripheral_reset(&RCC_APB2RSTR,RCC_APB2RSTR_ADC1RST);
+	rcc_peripheral_clear_reset(&RCC_APB2RSTR,RCC_APB2RSTR_ADC1RST);
+	rcc_set_adcpre(RCC_CFGR_ADCPRE_PCLK2_DIV6);	// Set. 12MHz, Max. 14MHz
+	adc_set_dual_mode(ADC_CR1_DUALMOD_IND);		// Independent mode
+	adc_disable_scan_mode(ADC1);
+	adc_set_right_aligned(ADC1);
+	adc_set_single_conversion_mode(ADC1);
+	adc_set_sample_time(ADC1,ADC_CHANNEL_TEMP,ADC_SMPR_SMP_239DOT5CYC);
+	adc_set_sample_time(ADC1,ADC_CHANNEL_VREF,ADC_SMPR_SMP_239DOT5CYC);
+	adc_enable_temperature_sensor();
+	adc_power_on(ADC1);
+	adc_reset_calibration(ADC1);
+	adc_calibrate_async(ADC1);
+	while ( adc_is_calibrating(ADC1) );
+}
+
+static uint16_t read_adc(uint8_t channel) {
+
+	/*Read ADC*/
+	adc_set_sample_time(ADC1,channel,ADC_SMPR_SMP_239DOT5CYC);
+	adc_set_regular_sequence(ADC1,1,&channel);
+	adc_start_conversion_direct(ADC1);
+	while ( !adc_eoc(ADC1) )
+		taskYIELD();
+	return adc_read_regular(ADC1);
+}
+
+
 
 /*********************************************************************
  * Lock mutex:
@@ -74,18 +111,9 @@ rtc_isr(void) {
 
 		// Increment time:
 		intstatus = taskENTER_CRITICAL_FROM_ISR();
-		if ( ++seconds >= 60 ) {
-			++minutes;
-			seconds -= 60;
-		}
-		if ( minutes >= 60 ) {
-			++hours;
-			minutes -= 60;
-		}
-		if ( hours >= 24 ) {
-			++days;
-			hours -= 24;
-		}
+		
+		Vin = read_adc(0) * 330 / 4095;
+		
 		taskEXIT_CRITICAL_FROM_ISR(intstatus);
 
 		// Wake task2 if we can:
@@ -131,7 +159,7 @@ task3(void *args __attribute__((unused))) {
 		ulTaskNotifyTake(pdTRUE,portMAX_DELAY);		
 
 		mutex_lock();
-		std_printf("*** ALARM *** at %3u days %02u:%02u:%02u\n",
+		std_printf("ALARM at %3u days %02u:%02u:%02u\n",
 			days,hours,minutes,seconds);
 		mutex_unlock();
 	}
@@ -152,9 +180,7 @@ task2(void *args __attribute__((unused))) {
 		gpio_toggle(GPIOC,GPIO13);
 
 		mutex_lock();
-		std_printf("Time: %3u days %02u:%02u:%02u isr_count: %u, alarms: %u, overflows: %u\n",
-			days,hours,minutes,seconds,
-			rtc_isr_count,rtc_alarm_count,rtc_overflow_count);
+		std_printf("Voltage: %d.%2d Time: %d\n",Vin/100,Vin%100);
 		mutex_unlock();
 	}
 }
@@ -173,8 +199,8 @@ rtc_setup(void) {
 
 	// RCC_HSE, RCC_LSE, RCC_LSI
 	rtc_awake_from_off(RCC_HSE); 
-	rtc_set_prescale_val(62500);
-	rtc_set_counter_val(0xFFFFFFF0);
+	rtc_set_prescale_val(625);
+	rtc_set_counter_val(0x00000000);
 
 	nvic_enable_irq(NVIC_RTC_IRQ);
 
@@ -253,8 +279,11 @@ main(void) {
 
 	rcc_clock_setup_in_hse_8mhz_out_72mhz();	// Use this for "blue pill"
 
+	rcc_periph_clock_enable(RCC_GPIOA);
 	rcc_periph_clock_enable(RCC_GPIOC);
 	gpio_set_mode(GPIOC,GPIO_MODE_OUTPUT_50_MHZ,GPIO_CNF_OUTPUT_PUSHPULL,GPIO13);
+	gpio_set_mode(GPIOA,GPIO_MODE_INPUT,GPIO_CNF_INPUT_ANALOG,GPIO0);
+	adc_setup();
 
 	h_mutex = xSemaphoreCreateMutex();
 	xTaskCreate(task1,"task1",350,NULL,1,NULL);

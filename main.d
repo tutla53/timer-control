@@ -38,4 +38,7 @@ main.o: main.c /usr/include/newlib/string.h /usr/include/newlib/_ansi.h \
  /home/hades/bp/stm32/libopencm3/include/libopencm3/stm32/common/gpio_common_all.h \
  /home/hades/bp/stm32/libopencm3/include/libopencm3/cm3/nvic.h \
  /home/hades/bp/stm32/libopencm3/include/libopencm3/dispatch/nvic.h \
- /home/hades/bp/stm32/libopencm3/include/libopencm3/stm32/f1/nvic.h
+ /home/hades/bp/stm32/libopencm3/include/libopencm3/stm32/f1/nvic.h \
+ /home/hades/bp/stm32/libopencm3/include/libopencm3/stm32/adc.h \
+ /home/hades/bp/stm32/libopencm3/include/libopencm3/stm32/f1/adc.h \
+ /home/hades/bp/stm32/libopencm3/include/libopencm3/stm32/common/adc_common_v1.h
